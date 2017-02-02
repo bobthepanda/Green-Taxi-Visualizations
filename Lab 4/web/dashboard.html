@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.js"></script>
+<style>
+
+svg {
+  font: 10px sans-serif;
+}
+
+path.background{
+  fill: none;
+  stroke: #ddd;
+  shape-rendering: crispEdges;
+}
+
+path.foreground{
+  fill: none;
+  stroke: steelblue;
+}
+
+circle.background{
+  fill: #ddd;
+  stroke: #ddd;
+}
+
+circle.foreground {
+  fill: steelblue;
+  stroke: steelblue;
+}
+
+.brush .extent {
+  fill-opacity: .3;
+  stroke: #fff;
+  shape-rendering: crispEdges;
+}
+
+.axis line,
+.axis path {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.axis text {
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+  cursor: move;
+}
+
+</style>
+<body>
+<div class="col-md-6" id="histogramContainer">
+  <h3>Histogram</h3>
+  <div id="histSelect"></div>
+  <div id="histogram"></div>
+</div>
+<div class="col-md-6">
+<div class="col-md-6" id="scatterplot">
+  <h3>Scatterplot</h3>
+  <div id="select">
+  </div>
+  <div id="chart"></div>
+</div>
+<div class="col-md-6" id="parallelContainer">
+  <div id="parallel"></div>
+</div>
+<div class="col-md-12" id="matrix"></div>
+</div>
+</body>
+<script>
+
+var sharedData = [];
+var filteredData = [];
+var foreground_inactive = [];
+var foreground_selected = [];
+var selectedFill = "yellow";
+var selectedStroke = "black";
+var current_x_var = 'Lpep_dropoff_datetime';
+var current_y_var = 'lpep_pickup_datetime';
+
+var attributes = ['Tolls_amount', 'Dropoff_latitude','Trip_distance','Fare_amount','Tip_amount','Payment_type','Dropoff_longitude','lpep_pickup_datetime','Lpep_dropoff_datetime','Passenger_count'];
+
+var top_five = ["Trip_distance", "Dropoff_longitude", "Fare_amount", "Tolls_amount", "lpep_pickup_datetime"];
+
+var parseTime = d3.time.format('%Y-%m-%d %H:%M:%S').parse;
+
+function isLog(name) {
+  return ['Tip_amount', 'Fare_amount', 'Tolls_amount', 'Trip_distance'].indexOf(name) >= 0;
+}
+
+function isTime(name) {
+  return ['Lpep_dropoff_datetime', 'lpep_pickup_datetime'].indexOf(name) >= 0;
+}
+
+d3.selection.prototype.moveToFront = function() {  
+  return this.each(function(){
+    this.parentNode.appendChild(this);
+  });
+};
+
+function mapToRealName(s) {
+    switch(s) {
+        case "Lpep_dropoff_datetime":
+            return "Dropoff Time";
+        case "lpep_pickup_datetime":
+            return "Pickup Time";
+        case "Passenger_count":
+            return "Passengers";
+        case "Tip_amount":
+            return "Tip";
+        case "Fare_amount":
+            return "Fare";
+        case "Payment_type":
+            return "Payment Type"
+        case "Pickup_longitude":
+            return "Pickup Long";
+        case "Dropoff_longitude":
+            return "Dropoff Long";
+          case "Dropoff_latitude":
+            return "Dropoff Latitude";
+        case "Tolls_amount":
+            return "Tolls";
+        case "Trip_distance":
+            return "Distance";
+        default:
+            return s;
+    }
+}
+
+function makeParallel(data) {
+  var margin = {top: 30, right: 10, bottom: 10, left: 10},
+      width = 800 - margin.left - margin.right,
+      height = 400 - margin.top - margin.bottom;
+
+  var x = d3.scale.ordinal().rangePoints([0, width], 1),
+      y = {},
+      dragging = {};
+
+  var line = d3.svg.line(),
+      axis = d3.svg.axis().orient("left"),
+      background,
+      foreground;
+
+  var parallelSVG =  d3.select("#parallel").html("").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  // Extract the list of dimensions and create a scale for each.
+  x.domain(dimensions = attributes.filter(function(d) {
+    if (isLog(d)) {
+      return d != "name" && (y[d] = d3.scale.log().clamp(true)
+          .domain([0.1, d3.max(sharedData, function(p) { return p[d]; })])
+          .range([height, 0]));
+    }
+    else if (isTime(d)) {
+      return d != "name" && (y[d] = d3.time.scale()
+          .domain(d3.extent(sharedData, function(p) {
+            return p[d]; }))
+          .range([height, 0]));
+    }
+    else {
+      return d != "name" && (y[d] = d3.scale.linear()
+          .domain(d3.extent(sharedData, function(p) { return p[d]; }))
+          .range([height, 0]));
+    }
+  }));
+
+  // Add grey background lines for context.
+  background = parallelSVG.append("g")
+    .selectAll("path")
+      .data(data)
+    .enter().append("path")
+      .attr("class", "background")
+      .attr("d", path);
+
+  // Add blue foreground lines for focus.
+  foreground = parallelSVG.append("g")
+    .selectAll("path")
+      .data(data)
+    .enter().append("path")
+      .attr("class", "foreground")
+      .style("stroke", function(d) {return foreground_selected.indexOf(d['index'].toString()) > -1 ? selectedFill : "steelblue"})
+      .attr("data-index", function(d) {return d['index']})
+      .attr("d", path);
+
+  // Add a group element for each dimension.
+  var g = parallelSVG.selectAll(".dimension")
+      .data(dimensions)
+    .enter().append("g")
+      .attr("class", "dimension")
+      .attr("transform", function(d) { return "translate(" + x(d) + ")"; })
+      .call(d3.behavior.drag()
+        .origin(function(d) { return {x: x(d)}; })
+        .on("dragstart", function(d) {
+          dragging[d] = x(d);
+          background.attr("visibility", "hidden");
+        })
+        .on("drag", function(d) {
+          dragging[d] = Math.min(width, Math.max(0, d3.event.x));
+          foreground.attr("d", path);
+          dimensions.sort(function(a, b) { return position(a) - position(b); });
+          x.domain(dimensions);
+          g.attr("transform", function(d) { return "translate(" + position(d) + ")"; })
+        })
+        .on("dragend", function(d) {
+          delete dragging[d];
+          transition(d3.select(this)).attr("transform", "translate(" + x(d) + ")");
+          transition(foreground).attr("d", path);
+          background
+              .attr("d", path)
+            .transition()
+              .delay(500)
+              .duration(0)
+              .attr("visibility", null);
+        }));
+
+  // Add an axis and title.
+  g.append("g")
+      .attr("class", "axis")
+      .each(function(d) {
+        if (isTime(d)) {
+          d3.select(this).call(axis.scale(y[d]).tickFormat(d3.time.format('%m-%d %H:%M')));
+        }
+        else  {
+          d3.select(this).call(axis.scale(y[d]).tickFormat(d3.format(".2f")));
+        }
+      })
+    .append("text")
+      .style("text-anchor", "middle")
+      .attr("y", -9)
+      .text(function(d) { return mapToRealName(d); });
+
+  // Add and store a brush for each axis.
+  g.append("g")
+      .attr("class", "brush")
+      .each(function(d) {
+        d3.select(this).call(y[d].brush = d3.svg.brush().y(y[d]).on("brushstart", brushstart).on("brush", brush));
+      })
+    .selectAll("rect")
+      .attr("x", -8)
+      .attr("width", 16);
+
+  function position(d) {
+    var v = dragging[d];
+    return v == null ? x(d) : v;
+  }
+
+  function transition(g) {
+    return g.transition().duration(500);
+  }
+
+  // Returns the path for a given data point.
+  function path(d) {
+    return line(dimensions.map(function(p) { return [position(p), y[p](d[p])]; }));
+  }
+
+  function brushstart() {
+    d3.event.sourceEvent.stopPropagation();
+  }
+
+  // Handles a brush event, toggling the display of foreground lines.
+  function brush() {
+    var actives = dimensions.filter(function(p) { return !y[p].brush.empty(); }),
+        extents = actives.map(function(p) { return y[p].brush.extent(); });
+    foreground.style("display", function(d) {
+      return actives.every(function(p, i) {
+        return extents[i][0] <= d[p] && d[p] <= extents[i][1];
+      }) ? null : "none";
+    });
+
+    foreground_inactive = [];
+    ids = [];
+    foreground[0].map(function(d) {if (d.style.display == 'none') {foreground_inactive.push(d.getAttribute('data-index'));}});
+    foreground[0].map(function(d) {ids.push(d.getAttribute('data-index'))});
+
+    ids.forEach(function(i) {
+      currentId = d3.selectAll('[data-index="'+i+'"]');
+      foreground_inactive.indexOf(i) > -1 ? currentId.style("display", "none") : currentId.style("display", null);
+    });
+  }
+}
+
+function makeSPMatrix(data) {
+  var width = 1400,
+          height = 1400,
+          body = d3.select('#matrix'),
+          svg = body.html("").append('svg')
+              .attr('width', width)
+              .attr('height', height),
+          buffer = 100,
+          padding = 5,
+          sw = 200,
+          sh = 200;
+
+  function makeScatterplot(selection, data, x_var, y_var) {
+      // set the dimensions and margins of the graph
+      var margin = {top: 20, right: 20, bottom: 30, left: 50},
+          width = sw - margin.left - margin.right,
+          height = sh - margin.top - margin.bottom;
+
+      var x, y = null;
+      // set the ranges
+
+      if (isLog(x_var)) {
+          x = d3.scale.log().range([0, width]);
+      }
+      else if (isTime(x_var)) {
+          x = d3.time.scale().range([0, width]);
+      }
+      else {
+          x = d3.scale.linear().range([0, width]);
+      }
+      if (isLog(y_var)) {
+          y = d3.scale.log().range([height, 0]);
+      }
+      else if (isTime(y_var)) {
+          y = d3.time.scale().range([height, 0]);
+      }
+      else {
+          y = d3.scale.linear().range([height, 0]);
+      }
+
+      // append the svg obgect to the body of the page
+      // appends a 'group' element to 'svg'
+      // moves the 'group' element to the top left margin
+      var svg = selection.html("").append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+          .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+      // Scale the range of the data
+      if(isLog(x_var)) {
+          x.clamp(true).domain([0.1, d3.max(sharedData, function(d) { return d[x_var]; })]);
+      }
+      else {
+          x.domain(d3.extent(sharedData, function(d) { return d[x_var]; }));
+      }
+      if(isLog(y_var)) {
+          y.clamp(true).domain([0.1, d3.max(sharedData, function(d) { return d[y_var]; })]);
+      }
+      else {
+          y.domain(d3.extent(sharedData, function(d) { return d[y_var]; }));
+      }
+
+      // Add the scatterplot
+      svg.selectAll("dot")
+          .data(data)
+          .enter().append("circle")
+          .attr("class", "background")
+          .attr("r", 2.5)
+          .attr("cx", function(d) { return x(d[x_var]); })
+          .attr("cy", function(d) {
+              return y(d[y_var]); });
+
+        // Add the scatterplot
+      svg.selectAll("dot")
+          .data(data)
+          .enter().append("circle")
+          .attr("class", "foreground")
+          .style("fill", function(d) {return foreground_selected.indexOf(d['index'].toString()) > -1 ? selectedFill : "steelblue"})
+          .style("stroke", function(d) {return foreground_selected.indexOf(d['index'].toString()) > -1 ? selectedStroke : "steelblue"})
+          .attr("data-index", function(d) {return d['index']})
+          .attr("r", 2.5)
+          .attr("cx", function(d) { return x(d[x_var]); })
+          .attr("cy", function(d) {
+              return y(d[y_var]); });
+
+
+
+      // Add the X Axis
+      if (isTime(x_var)) {
+          svg.append("g")
+              .attr("transform", "translate(0," + height + ")")
+              .call(d3.svg.axis().scale(x).ticks(3).orient('bottom'));
+      }
+      else {
+          svg.append("g")
+              .attr("transform", "translate(0," + height + ")")
+              .call(d3.svg.axis().scale(x).ticks(3, ".2f").orient('bottom'));
+      }
+
+      // Add the Y Axis
+      if (isTime(y_var)) {
+          svg.append("g")
+              .call(d3.svg.axis().scale(y).orient('left'));
+      }
+      else {
+          svg.append("g")
+              .call(d3.svg.axis().scale(y).ticks(4, ".2f").orient('left'));
+      }
+  }
+
+  matrixData = [];
+
+  for(var i = 0; i < top_five.length; i++) {
+      matrixData.push(top_five)
+  }
+
+  top_five.forEach(function(d, i) {
+    svg.append('text')
+        .attr('x', function() {
+            return buffer + padding + (sw + 5) * (i + .5);})
+        .attr('y', buffer - padding)
+        .text(mapToRealName(d));
+
+    svg.append('text')
+        .style('text-anchor', 'end')
+        .attr('y', function() {
+            return buffer * 3 + (sw + 5) * (i - .5) - padding;})
+        .attr('x', buffer)
+        .text(mapToRealName(d));
+  });
+
+  var row = svg.selectAll('g')
+    .data(matrixData)
+    .enter().append('g')
+    .attr('transform', function(d, i) {
+        return 'translate(0, ' + (buffer + ((sh + 5) * i)) + ')';
+    })
+    .attr('data-y', function(d, i) {
+        return top_five[i];
+    });
+
+  var rows_columns = row.selectAll('g')
+    .data(function(d, i) {
+        return d;})
+    .enter()
+    .append('g')
+    .attr('transform', function(d, i) {
+        return 'translate( ' + (buffer + padding + (sw + 5) * i) + ',0)';
+    })
+    .attr('data-x', function(d, i) {
+        return top_five[i];
+    });
+
+  row.each(function(rowItem, i) {
+    currentRow = d3.select(this);
+    var columns = currentRow.selectAll('g');
+    columns.each(function(columnItem, i) {
+        d3.select(this).call(makeScatterplot, data, d3.select(this).attr('data-x'), currentRow.attr('data-y'));
+    });
+  });
+}
+
+function updateScatterplot() {
+  current_x_var = document.getElementById('x_axis').value;
+  current_y_var = document.getElementById('y_axis').value;
+  makeScatterplot(filteredData, current_x_var, current_y_var);
+}
+
+function selectSwitch(clicked) {
+  index = clicked.getAttribute('data-index');
+  circles = d3.selectAll('circle.foreground[data-index="' + index + '"]');
+  paths = d3.selectAll('path.foreground[data-index="' + index + '"]');
+
+  numPaths = 0;
+
+  paths.forEach(function(d) {numPaths += d.length});
+
+  var color = clicked.style.fill == selectedFill ? "steelblue" : selectedFill;
+  var strokeColor = clicked.style.fill == selectedFill ? "steelblue" : selectedStroke;
+  circles.style("fill", color).style("stroke", strokeColor);
+  circles.moveToFront();
+  paths.style("stroke", color);
+  paths.moveToFront();
+
+  var index_loc = foreground_selected.indexOf(index);
+  index_loc > -1 ? foreground_selected.splice(index_loc, 1) : foreground_selected.push(index);
+}
+
+function makeScatterplot(data, x_var, y_var) {
+    // set the dimensions and margins of the graph
+    var margin = {top: 20, right: 20, bottom: 30, left: 50},
+        width =  300 - margin.left - margin.right,
+        height = 300 - margin.top - margin.bottom;
+
+    var x, y = null;
+    // set the ranges
+
+    if (isLog(x_var)) {
+      x = d3.scale.log().range([0, width]);
+    }
+    else if (isTime(x_var)) {
+      x = d3.time.scale().range([0, width]);
+    }
+    else {
+      x = d3.scale.linear().range([0, width]);
+    }
+    if (isLog(y_var)) {
+      y = d3.scale.log().range([height, 0]);
+    }
+    else if (isTime(y_var)) {
+      y = d3.time.scale().range([height, 0]);
+    }
+    else {
+      y = d3.scale.linear().range([height, 0]);
+    }
+
+    // append the svg obgect to the body of the page
+    // appends a 'group' element to 'svg'
+    // moves the 'group' element to the top left margin
+    var svg = d3.select("#chart").html("")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+    // Scale the range of the data
+    if(isLog(x_var)) {
+      x.clamp(true).domain([0.1, d3.max(sharedData, function(d) { return d[x_var]; })]);
+    }
+    else {
+      x.domain(d3.extent(sharedData, function(d) { return d[x_var]; }));
+    }
+    if(isLog(y_var)) {
+      y.clamp(true).domain([0.1, d3.max(sharedData, function(d) { return d[y_var]; })]);
+    }
+    else {
+      y.domain(d3.extent(sharedData, function(d) { return d[y_var]; }));
+    }
+        
+    // Add the scatterplot
+    svg.selectAll("dot")
+        .data(data)
+      .enter().append("circle")
+        .attr("class", "background")
+        .attr("r", 2.5)
+        .attr("cx", function(d) { return x(d[x_var]); })
+        .attr("cy", function(d) { return y(d[y_var]); });
+
+      svg.selectAll("dot")
+        .data(data)
+      .enter().append("circle")
+        .attr("class", "foreground")
+        .style("fill", function(d) {return foreground_selected.indexOf(d['index'].toString()) > -1 ? selectedFill : "steelblue"})
+        .style("stroke", function(d) {return foreground_selected.indexOf(d['index'].toString()) > -1 ? selectedStroke : "steelblue"})
+        .style("display", function(d) {return foreground_inactive.indexOf(d['index'].toString()) > -1 ? "none" : null})
+        .attr("data-index", function(d) {return d['index']})
+        .attr("r", 2.5)
+        .attr("cx", function(d) { return x(d[x_var]); })
+        .attr("cy", function(d) { return y(d[y_var]); })
+        .attr("onclick", "selectSwitch(this)");
+
+    // Add the X Axis
+    if (isTime(x_var)) {
+      svg.append("g")
+          .attr("transform", "translate(0," + height + ")")
+          .call(d3.svg.axis().orient("bottom").scale(x));
+    }
+    else {
+      svg.append("g")
+          .attr("transform", "translate(0," + height + ")")
+          .call(d3.svg.axis().orient("bottom").scale(x).ticks(4, ".2f"));
+    }
+
+    // Add the Y Axis
+    if (isTime(y_var)) {
+      svg.append("g")
+          .call(d3.svg.axis().orient("left").scale(y));
+    }
+    else {
+      svg.append("g")
+          .call(d3.svg.axis().orient("left").scale(y).ticks(4, ".2f"));
+    }
+}
+
+function updateHistogram(obj) {
+  makeHistogram(sharedData, obj.value);
+  makeParallel(sharedData);
+  makeSPMatrix(sharedData);
+  makeScatterplot(sharedData, current_x_var, current_y_var);
+
+  foreground_selected.forEach(function(d) {
+    d3.selectAll('[data-index="'+ d + '"]').moveToFront();
+  }); 
+}
+
+function makeHistogram(data, x_var) {
+  var color = "steelblue";
+
+  // Generate a 1000 data points using normal distribution with mean=20, deviation=5
+
+  // A formatter for counts.
+  var formatCount = d3.format(",.0f");
+
+  var extractedData = data.map(function(d) {return d[x_var]});
+
+  var margin = {top: 20, right: 30, bottom: 30, left: 30},
+      width = 960 - margin.left - margin.right,
+      height = 500 - margin.top - margin.bottom;
+
+  var max = d3.max(extractedData);
+  var min = d3.min(extractedData);
+  var x;
+  if (isTime(x)) {
+    x = d3.time.scale()
+          .domain([min, max])
+          .range([0, width]);
+  }
+  else {
+    x = d3.scale.linear()
+          .domain([min, max])
+          .range([0, width]);
+  }
+
+  // Generate a histogram using twenty uniformly-spaced bins.
+  var binnedData = d3.layout.histogram()
+      .bins(x.ticks(20))
+      (extractedData);
+
+  var yMax = d3.max(binnedData, function(d){return d.length});
+  var yMin = d3.min(binnedData, function(d){return d.length});
+  var y;
+
+  y = d3.scale.linear()
+      .domain([0, yMax])
+      .range([height, 0]);
+  
+
+  var xAxis = d3.svg.axis()
+      .scale(x)
+      .orient("bottom");
+
+  var svg = d3.select("#histogram").html("").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  var bar = svg.selectAll(".bar")
+      .data(binnedData)
+    .enter().append("g")
+      .attr("class", "bar foreground")
+      .attr("transform", function(d) {return "translate(" + x(d.x) + "," + y(d.length) + ")"; });
+
+  bar.append("rect")
+      .attr("class", "background")
+      .attr("x", 1)
+      .attr("width", (x(binnedData[0].dx) - x(0)) - 1)
+      .attr("height", function(d) { return height - y(d.length); })
+      .attr("fill", "grey")
+      .attr("cat-index", function(d, i) {return i})
+      .on("click", function(d) { return clickBar(this, d, x_var); });
+
+
+  bar.append("rect")
+      .attr("class", "foreground")
+      .attr("x", 1)
+      .attr("width", (x(binnedData[0].dx) - x(0)) - 1)
+      .attr("height", function(d) { return height - y(d.length); })
+      .attr("fill", color)
+      .attr("cat-index", function(d, i) {return i})
+      .on("click", function(d) { return clickBar(this, d, x_var); });
+
+  bar.append("text")
+      .attr("dy", ".75em")
+      .attr("y", -12)
+      .attr("x", (x(binnedData[0].dx) - x(0)) / 2)
+      .attr("text-anchor", "middle")
+      .text(function(d) { return formatCount(d.length); });
+
+  svg.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis);
+}
+
+function clickBar(obj, d, x_var) {
+  if (d3.selectAll('rect.foreground[style="display: none;"]').size() == 0 || obj.className.baseVal != "foreground") {
+    d3.selectAll('rect.foreground').style("display", "none");
+    index_string = '"' + obj.getAttribute('cat-index').toString() + '"';
+    d3.selectAll('rect.foreground[cat-index=' + index_string + ']').style("display", null);
+    filteredData = sharedData.filter(function(s) {return d.indexOf(s[x_var]) > -1});
+    makeParallel(filteredData);
+    makeSPMatrix(filteredData);
+    makeScatterplot(filteredData, current_x_var, current_y_var);
+  }
+  else {
+    d3.selectAll('rect.foreground').style("display", null);
+    filteredData = sharedData;
+    makeParallel(filteredData);
+    makeSPMatrix(filteredData);
+    makeScatterplot(filteredData, current_x_var, current_y_var);
+
+
+    foreground_selected.forEach(function(d) {
+      d3.selectAll('[data-index="'+ d + '"]').moveToFront();
+    }); 
+  }
+}
+
+d3.csv("csv/km_results.csv", function(error, data) {
+  data.forEach(function(d, i) {
+        d['index'] = i
+        for (var a = 0; a < attributes.length; a++) {
+          if (isTime(attributes[a])) {
+            d[attributes[a]] = parseTime(d[attributes[a]]);
+          }
+          else {
+            d[attributes[a]] = +d[attributes[a]];
+          }
+        }
+  });
+
+  var selectBar = d3.select('#select');
+  selectBar.html("");
+  selectBar.append('text').text("X-axis: ");
+  var firstSelect = selectBar.append('select').attr('id', 'x_axis').attr('onchange', 'updateScatterplot()');
+  selectBar.append('text').text("\tY-axis: ");
+  var secondSelect = selectBar.append('select').attr('id', 'y_axis').attr('onchange', 'updateScatterplot()');
+
+  for(var i = 0; i < attributes.length; i++) {
+    firstSelect.append('option')
+      .attr("value", attributes[i])
+      .text(mapToRealName(attributes[i]));
+    secondSelect.append('option')
+      .attr("value", attributes[i])
+      .text(mapToRealName(attributes[i]));
+  }
+
+  var histSelectBar = d3.select('#histSelect');
+  histSelectBar.html("");
+  histSelectBar.append('text').text("Category: ");
+  var histSelect = histSelectBar.append('select').attr('onchange', 'updateHistogram(this)');
+
+  for(var i = 0; i < attributes.length; i++) {
+      histSelect.append('option')
+        .attr("value", attributes[i])
+        .text(mapToRealName(attributes[i]));
+  }
+
+
+  firstSelect.property("value", current_x_var);
+  histSelect.property("value", current_x_var);
+  secondSelect.property("value", current_y_var);
+
+  sharedData = data;
+  filteredData = sharedData;
+  makeParallel(data);
+  makeSPMatrix(data);
+  makeScatterplot(data, current_x_var, current_y_var);
+  makeHistogram(data, current_x_var);
+
+  
+});
+
+</script>

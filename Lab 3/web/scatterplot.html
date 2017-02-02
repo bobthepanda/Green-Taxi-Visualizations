@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 2px;
+}
+
+</style>
+<head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="scripts.js"></script>
+        <script src="https://d3js.org/d3.v4.min.js"></script>
+    </head>
+<body>
+<nav class="navbar navbar-default">
+  <div class="container">
+    <ul class="nav navbar-nav">
+      <li><a href="scatterplot.html">Scatterplot</a></li>
+      <li><a href="cor.html">Correlation Matrix</a></li> 
+      <li><a href="scatterplot_mat.html">Scatterplot Matrix</a></li> 
+      <li><a href="parallel.html">Parallel Coordinates</a></li> 
+      <li><a href="scree.html">PCA Plot & Scree Plot</a></li> 
+      <li><a href="biplot.html">Biplot</a></li> 
+      <li><a href="mds_1.html">MDS (Euclidean)</a></li> 
+      <li><a href="mds_2.html">MDS (1 - |correlation|)</a></li> 
+    </ul>
+  </div>
+</nav>
+<div class="container" id="select">
+  <h3>Scatterplot</h3>
+</div>
+<div class="container" id="chart"></div>
+<!-- load the d3.js library -->
+<script>
+
+var loaded = false;
+
+var parseTime = d3.timeParse('%Y-%m-%d %H:%M:%S');
+
+function isLog(name) {
+  return ['Tip_amount', 'Fare_amount', 'Tolls_amount', 'Trip_distance'].indexOf(name) >= 0;
+}
+
+function isTime(name) {
+  return ['Lpep_dropoff_datetime', 'lpep_pickup_datetime'].indexOf(name) >= 0;
+}
+
+function mapToRealName(s) {
+        switch(s) {
+            case "Lpep_dropoff_datetime":
+                return "Dropoff Time";
+            case "lpep_pickup_datetime":
+                return "Pickup Time";
+            case "Passenger_count":
+                return "Passengers";
+            case "Tip_amount":
+                return "Tip";
+            case "Fare_amount":
+                return "Fare";
+            case "Payment_type":
+                return "Payment Type"
+            case "Pickup_longitude":
+                return "Pickup Long";
+            case "Dropoff_longitude":
+                return "Dropoff Long";
+            case "Tolls_amount":
+                return "Tolls";
+            case "Trip_distance":
+                return "Distance";
+            default:
+                return s;
+        }
+    }
+
+function updateScatterplot() {
+  makeScatterplot(document.getElementById('x_axis').value, document.getElementById('y_axis').value);
+}
+
+function makeScatterplot(x_var, y_var) {
+    // set the dimensions and margins of the graph
+    var margin = {top: 20, right: 20, bottom: 30, left: 50},
+        width =  900 - margin.left - margin.right,
+        height = 900 - margin.top - margin.bottom;
+
+    var x, y = null;
+    // set the ranges
+
+    if (isLog(x_var)) {
+      x = d3.scaleLog().range([0, width]);
+    }
+    else if (isTime(x_var)) {
+      x = d3.scaleTime().range([0, width]);
+    }
+    else {
+      x = d3.scaleLinear().range([0, width]);
+    }
+    if (isLog(y_var)) {
+      y = d3.scaleLog().range([height, 0]);
+    }
+    else if (isTime(y_var)) {
+      y = d3.scaleTime().range([height, 0]);
+    }
+    else {
+      y = d3.scaleLinear().range([height, 0]);
+    }
+
+    // append the svg obgect to the body of the page
+    // appends a 'group' element to 'svg'
+    // moves the 'group' element to the top left margin
+    var svg = d3.select("#chart").html("")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+    // Get the data
+    d3.csv("csv/km_results.csv", function(error, data) {
+      if (error) throw error;
+
+      if (!loaded) {
+        loaded = true;
+
+        var attributes = [];
+
+        for(var name in data[0]) {
+            attributes.push(name);
+        }
+
+        var selectBar = d3.select('#select');
+        selectBar.append('text').text("X-axis: ");
+        var firstSelect = selectBar.append('select').attr('id', 'x_axis').attr('onchange', 'updateScatterplot()');
+        selectBar.append('text').text("\tY-axis: ");
+        var secondSelect = selectBar.append('select').attr('id', 'y_axis').attr('onchange', 'updateScatterplot()');
+
+        for(var i = 0; i < attributes.length; i++) {
+          firstSelect.append('option')
+            .attr("value", attributes[i])
+            .text(mapToRealName(attributes[i]));
+          secondSelect.append('option')
+            .attr("value", attributes[i])
+            .text(mapToRealName(attributes[i]));
+        }
+        document.getElementById('x_axis').value = 'Lpep_dropoff_datetime';
+        document.getElementById('y_axis').value = 'lpep_pickup_datetime';
+      }
+
+      // format the data
+      data.forEach(function(d) {
+          if (isTime(x_var)) {
+            d[x_var] = parseTime(d[x_var]);
+          }
+          else {
+            d[x_var] = +d[x_var];
+          }
+          if (isTime(y_var)) {
+            d[y_var] = parseTime(d[y_var]);
+          }
+          else {
+            d[y_var] = +d[y_var];
+          }
+      });
+
+      // Scale the range of the data
+      if(isLog(x_var)) {
+        x.clamp(true).domain([0.1, d3.max(data, function(d) { return d[x_var]; })]);
+      }
+      else {
+        x.domain(d3.extent(data, function(d) { return d[x_var]; }));
+      }
+      if(isLog(y_var)) {
+        y.clamp(true).domain([0.1, d3.max(data, function(d) { return d[y_var]; })]);
+      }
+      else {
+        y.domain(d3.extent(data, function(d) { return d[y_var]; }));
+      }
+          
+      // Add the scatterplot
+      svg.selectAll("dot")
+          .data(data)
+        .enter().append("circle")
+          .attr("r", 2.5)
+          .attr("cx", function(d) { return x(d[x_var]); })
+          .attr("cy", function(d) { return y(d[y_var]); });
+
+      // Add the X Axis
+      if (isTime(x_var)) {
+        svg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(x));
+      }
+      else {
+        svg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(x).ticks(4, ".2f"));
+      }
+
+      // Add the Y Axis
+      if (isTime(y_var)) {
+        svg.append("g")
+            .call(d3.axisLeft(y));
+      }
+      else {
+        svg.append("g")
+            .call(d3.axisLeft(y).ticks(4, ".2f"));
+      }
+    });
+}
+
+makeScatterplot('Lpep_dropoff_datetime', 'lpep_pickup_datetime');
+</script>
+</body>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 2px;
+}
+
+</style>
+<head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="scripts.js"></script>
+        <script src="https://d3js.org/d3.v4.min.js"></script>
+    </head>
+<body>
+<nav class="navbar navbar-default">
+  <div class="container">
+    <ul class="nav navbar-nav">
+      <li><a href="scatterplot.html">Scatterplot</a></li>
+      <li><a href="cor.html">Correlation Matrix</a></li> 
+      <li><a href="scatterplot_mat.html">Scatterplot Matrix</a></li> 
+      <li><a href="parallel.html">Parallel Coordinates</a></li> 
+      <li><a href="scree.html">PCA Plot & Scree Plot</a></li> 
+      <li><a href="biplot.html">Biplot</a></li> 
+      <li><a href="mds_1.html">MDS (Euclidean)</a></li> 
+      <li><a href="mds_2.html">MDS (1 - |correlation|)</a></li> 
+    </ul>
+  </div>
+</nav>
+<div class="container" id="biplot">
+  <h3>Biplot</h3>
+</div>
+<!-- load the d3.js library -->
+<script>
+
+var loaded = false;
+
+var parseTime = d3.timeParse('%Y-%m-%d %H:%M:%S');
+
+function isLog(name) {
+  return ['Tip_amount', 'Fare_amount', 'Tolls_amount', 'Trip_distance'].indexOf(name) >= 0;
+}
+
+function isTime(name) {
+  return ['Lpep_dropoff_datetime', 'lpep_pickup_datetime'].indexOf(name) >= 0;
+}
+
+function mapToRealName(s) {
+        switch(s) {
+            case "Lpep_dropoff_datetime":
+                return "Dropoff Time";
+            case "lpep_pickup_datetime":
+                return "Pickup Time";
+            case "Passenger_count":
+                return "Passengers";
+            case "Tip_amount":
+                return "Tip";
+            case "Fare_amount":
+                return "Fare";
+            case "Payment_type":
+                return "Payment Type"
+            case "Pickup_longitude":
+                return "Pickup Long";
+            case "Dropoff_longitude":
+                return "Dropoff Long";
+            case "Tolls_amount":
+                return "Tolls";
+            case "Trip_distance":
+                return "Distance";
+            default:
+                return s;
+        }
+    }
+
+function makeScatterplot(x_var, y_var) {
+    // set the dimensions and margins of the graph
+    var margin = {top: 20, right: 20, bottom: 30, left: 50},
+        padding = 40;
+        width = 900 - margin.left - margin.right - padding;
+        height = 500 - margin.top - margin.bottom - padding;
+
+    // set the ranges
+    var x = d3.scaleLinear().domain([-1,1]).range([padding, width+padding]);
+    var y = d3.scaleLinear().domain([-1,1]).range([height, 0]);
+
+    // append the svg obgect to the body of the page
+    // appends a 'group' element to 'svg'
+    // moves the 'group' element to the top left margin
+    var svg = d3.select("#biplot")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right + padding)
+        .attr("height", height + margin.top + margin.bottom + padding)
+      .append("g")
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+    // Get the data
+    d3.csv("csv/proj_data.csv", function(error, data) {
+      if (error) throw error;
+
+      // format the data
+      data.forEach(function(d) {
+        d[x_var] = +d[x_var];
+        d[y_var] = +d[y_var];
+      });
+ 
+    var x_scalar = 1 / Math.max(d3.max(data, function(d) {return d[x_var]}), Math.abs(d3.min(data, function(d) {return d[x_var]})));
+    var y_scalar = 1 / Math.max(d3.max(data, function(d) {return d[y_var]}), Math.abs(d3.min(data, function(d) {return d[y_var]})));
+      // Add the biplotplot
+      svg.selectAll("circle")
+          .data(data)
+        .enter().append("circle")
+          .attr("r", 2.5)
+          .attr("cx", function(d) { return x((d[x_var]) * x_scalar); })
+          .attr("cy", function(d) { return y((d[y_var]) * y_scalar); });
+
+      // Add the X Axis
+      svg.append("g")
+          .attr("transform", "translate(0" +"," + height + ")")
+          .call(d3.axisBottom(x));
+
+      // Add the Y Axis
+      svg.append("g")
+          .attr("transform", "translate(" + padding + ",0)")
+          .call(d3.axisLeft(y));
+
+      // text label for the x axis
+      svg.append("text")             
+        .attr("transform",
+              "translate(" + (width/2 + padding) + " ," + 
+                             (height + margin.top + 20) + ")")
+        .style("text-anchor", "middle")
+        .text("PCA-1");
+
+      // text label for the y axis
+      svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - padding)
+        .attr("x",0 - (height / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("PCA-2");   
+
+        d3.csv("csv/eigenvecs.csv", function(error2, data2) {
+          data2.forEach(function(d) {
+            d[x_var] = +d[x_var];
+            d[y_var] = +d[y_var];
+          });
+
+          console.log(svg);
+
+          var svg = d3.select("#biplot").select("svg").append("g")
+            .attr("transform",
+                  "translate(" + margin.left + "," + margin.top + ")");
+
+          var vector = svg.selectAll(".vector")
+            .data(data2)
+            .enter().append("g")
+              .attr('class', 'vector');
+
+
+          vector.append("line")
+            .style("stroke", "black")
+            .attr("x1", x(0))
+            .attr("y1", y(0))
+            .attr("x2", function(d) {return x(d[x_var]);})
+            .attr("y2", function(d) {return y(d[y_var]);})
+
+          vector.append("text")
+            .style("fill", "black")
+            .attr("text-anchor", "middle")
+            .attr("x", (function(d) {return x(d[x_var] * 1.15);}))
+            .attr("y", (function(d) {return y(d[y_var] * 1.15);}))
+            .text(function(d) {return mapToRealName(d.attribute)});
+
+
+          var svg = d3.select("#biplot").select("svg").append("g")
+            .attr("transform",
+                  "translate(" + margin.left + "," + margin.top + ")");
+        });   
+      });
+
+    
+}
+
+
+
+makeScatterplot('1', '2');
+</script>
+</body>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="scripts.js"></script>
+        <script src="https://d3js.org/d3.v4.min.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h2 id="pageTitle">Green Taxi Trip Data for June 2, 2016</h2>
+            <div class="tab-content">
+                <div id="home" class="tab-pane fade in active">Select a variable to view a histogram.<br/></div>
+                <div id="pickup_times" class="tab-pane fade">
+                    <h2>Pickup Times</h2>
+                </div>
+                <div id="dropoff_times" class="tab-pane fade">
+                    <h2>Dropoff Times</h2>
+                </div>
+                <div id="ratecode" class="tab-pane fade">
+                    <h2>Rate Code</h2>
+                </div>
+                <div id="pickupLong" class="tab-pane fade">
+                    <h2>Pickup Longitude</h2>
+                </div>
+                <div id="pickupLat" class="tab-pane fade">
+                    <h2>Pickup Latitude</h2>
+                </div>
+                <div id="dropoffLong" class="tab-pane fade">
+                    <h2>Dropoff Longitude</h2>
+                </div>
+                <div id="dropoffLat" class="tab-pane fade">
+                    <h2>Dropoff Latitude</h2>
+                </div>
+                <div id="passengerCount" class="tab-pane fade">
+                    <h2>Passenger Count</h2>
+                </div>
+                <div id="tripDist" class="tab-pane fade">
+                    <h2>Trip Distance</h2>
+                </div>
+                <div id="fareAmt" class="tab-pane fade">
+                    <h2>Fare Amount</h2>
+                </div>
+                <div id="tipAmt" class="tab-pane fade">
+                    <h2>Tip Amount</h2>
+                </div>
+                <div id="tollsAmt" class="tab-pane fade">
+                    <h2>Tolls Amount</h2>
+                </div>
+                <div id="Payment_type" class="tab-pane fade">
+                    <h2>Payment Type</h2>
+                </div>
+                <div id="Trip_type" class="tab-pane fade">
+                    <h2>Trip Type</h2>
+                </div>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">Select a variable to view.
+                <span class="caret"></span></button>
+                    <ul class="dropdown-menu">
+                        <li><a data-toggle="pill" href="#pickup_times">Pickup Times</a></li>
+                        <li><a data-toggle="pill" href="#dropoff_times">Dropoff Times</a></li>
+                        <li><a data-toggle="pill" href="#ratecode">Rate Code</a></li>
+                        <li><a data-toggle="pill" href="#pickupLong">Pickup Longitude</a></li>
+                        <li><a data-toggle="pill" href="#pickupLat">Pickup Latitude</a></li>
+                        <li><a data-toggle="pill" href="#dropoffLong">Dropoff Longitude</a></li>
+                        <li><a data-toggle="pill" href="#dropoffLat">Dropoff Latitude</a></li>
+                        <li><a data-toggle="pill" href="#passengerCount">Passenger Count</a></li>
+                        <li><a data-toggle="pill" href="#tripDist">Trip Distance</a></li>
+                        <li><a data-toggle="pill" href="#fareAmt">Fare Amount</a></li>
+                        <li><a data-toggle="pill" href="#tipAmt">Tip Amount</a></li>
+                        <li><a data-toggle="pill" href="#tollsAmt">Tolls Amount</a></li>
+                        <li><a data-toggle="pill" href="#Payment_type">Payment Type</a></li>
+                        <li><a data-toggle="pill" href="#Trip_type">Trip Type</a></li>
+                    </ul>
+            </div>
+        </div>
+    </body>
+    <script>
+    var parseTime = d3.timeParse('%Y-%m-%d %H:%M:%S');
+
+    var color = "#337ab7";
+    var stroke_width = 7.5;
+
+    function makeHistogram(data, numOfBins, div, isTime) {
+        var margin = {top: 30, right: 30, bottom: 30, left: 30},
+            width = 960 - margin.left - margin.right,
+            height = 500 - margin.top - margin.bottom;
+
+        var x;
+        if (isTime) {
+            x = d3.scaleTime()
+                .domain(d3.extent(data))
+                .rangeRound([0, width]);
+        }
+        else {
+            x = d3.scaleLinear()
+                .domain(d3.extent(data))
+                .rangeRound([0, width]);
+        }
+
+        var bins = d3.histogram()
+            .domain(x.domain())
+            .thresholds(x.ticks(numOfBins))
+            (data);
+
+        var y = d3.scaleLinear()
+            .domain([0, d3.max(bins, function(d) { return d.length; })])
+            .range([height, 0]);
+
+        var svg = d3.select(div).append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        svg.append("g")
+            .attr("class", "axis axis--x")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(x));
+
+        var bar = svg.selectAll(".bar")
+            .data(bins)
+          .enter().append("g")
+            .attr("class", "bar")
+            .attr("transform", function(d) { return "translate(" + x(d.x0) + "," + y(d.length) + ")"; })
+            .style("fill", color)
+            .on("mouseover", function(d) {      
+                $(this).children('text').css("visibility", "visible");
+                $(this).children('rect').css("stroke-width", "");
+                })                  
+            .on("mouseout", function(d) {       
+                $(this).children('text').css("visibility", "hidden");
+                $(this).children('rect').css("stroke-width", stroke_width);
+        });;
+
+        bar.append("rect")
+            .attr("x", 1)
+            .attr("width", x(bins[0].x1) - x(bins[0].x0) - 1)
+            .attr("height", function(d) { return height - y(d.length); })
+            .style("fill", color)
+            .style("stroke", "white")
+            .style("stroke-width", stroke_width)
+            .append("svg:title")
+            .text(function(d) { return d.x; });
+
+        bar.append("text")
+            .attr("dy", ".75em")
+            .attr("y", -20)
+            .attr("x", (x(bins[0].x1) - x(bins[0].x0)) / 2)
+            .attr("text-anchor", "middle")
+            .text(function(d) { return d.length; })
+            .style("fill", color)
+            .style("visibility", "hidden")
+    }
+
+    d3.csv('results.csv', function(error, data) {
+        if (error) throw error;
+
+        data.forEach(function(d) {
+            d.lpep_pickup_datetime = parseTime(d.lpep_pickup_datetime);
+            d.Lpep_dropoff_datetime = parseTime(d.Lpep_dropoff_datetime);
+            d.RateCodeID = +d.RateCodeID;
+            d.Pickup_longitude = +d.Pickup_longitude;
+            d.Pickup_latitude = +d.Pickup_latitude;
+            d.Dropoff_longitude = +d.Dropoff_longitude;
+            d.Dropoff_latitude = +d.Dropoff_latitude;
+            d.Passenger_count = +d.Passenger_count;
+            d.Trip_distance = +d.Trip_distance;
+            d.Fare_amount = +d.Fare_amount;
+            d.Tip_amount = +d.Tip_amount;
+            d.Tolls_amount = +d.Tolls_amount;
+            d.Payment_type = +d.Payment_type;
+            d.Trip_type = +d.Trip_type;
+        });
+
+        var pickupTime = data.map(function(d) {return d.lpep_pickup_datetime});
+        var dropoffTime = data.map(function(d) {return d.Lpep_dropoff_datetime});
+        var rateCode = data.map(function(d) {return Math.round(d.RateCodeID)});
+        var pickupLong = data.map(function(d) {return d.Pickup_longitude});
+        var pickupLat = data.map(function(d) {return d.Pickup_latitude});
+        var dropoffLong = data.map(function(d) {return d.Dropoff_longitude});
+        var dropoffLat = data.map(function(d) {return d.Dropoff_latitude});
+        var passengerCount = data.map(function(d) {return Math.round(d.Passenger_count)});
+        var tripDist = data.map(function(d) {return d.Trip_distance});
+        var fareAmt = data.map(function(d) {return d.Fare_amount});
+        var tipAmt = data.map(function(d) {return d.Tip_amount});
+        var tollsAmt = data.map(function(d) {return d.Tolls_amount});
+        var Payment_type = data.map(function(d) {return Math.round(d.Payment_type)});
+        var Trip_type = data.map(function(d) {return Math.round(d.Trip_type)});
+
+        makeHistogram(pickupTime, 24, '#pickup_times', true);
+        makeHistogram(dropoffTime, 24, '#dropoff_times', true);
+        makeHistogram(rateCode, 4, '#ratecode', false)
+        makeHistogram(pickupLong, 20, '#pickupLong', false);
+        makeHistogram(pickupLat, 10, '#pickupLat', false);
+        makeHistogram(dropoffLong, 20, '#dropoffLong', false);
+        makeHistogram(dropoffLat, 20, '#dropoffLat', false);
+        makeHistogram(passengerCount, 4, '#passengerCount', false, false);
+        makeHistogram(tripDist, 20, '#tripDist', false);
+        makeHistogram(fareAmt, 70, '#fareAmt', false);
+        makeHistogram(tipAmt, 70, '#tipAmt', false);
+        makeHistogram(tollsAmt, 20, '#tollsAmt', false);
+        makeHistogram(Payment_type, 4, '#Payment_type', false);
+        makeHistogram(Trip_type, 2, '#Trip_type', false);
+    });
+    </script>
+</html>

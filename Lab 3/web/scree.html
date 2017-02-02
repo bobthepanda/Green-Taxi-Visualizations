@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 2px;
+}
+
+</style>
+<head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="scripts.js"></script>
+        <script src="https://d3js.org/d3.v4.min.js"></script>
+    </head>
+<body>
+<nav class="navbar navbar-default">
+  <div class="container">
+    <ul class="nav navbar-nav">
+      <li><a href="scatterplot.html">Scatterplot</a></li>
+      <li><a href="cor.html">Correlation Matrix</a></li> 
+      <li><a href="scatterplot_mat.html">Scatterplot Matrix</a></li> 
+      <li><a href="parallel.html">Parallel Coordinates</a></li> 
+      <li><a href="scree.html">PCA Plot & Scree Plot</a></li> 
+      <li><a href="biplot.html">Biplot</a></li> 
+      <li><a href="mds_1.html">MDS (Euclidean)</a></li> 
+      <li><a href="mds_2.html">MDS (1 - |correlation|)</a></li> 
+    </ul>
+  </div>
+</nav>
+<div class="container" id="scatter">
+  <h3>PCA Scatterplot</h3>
+</div>
+<div class="container" id="scree">
+  <h3>Scree Plot</h3>
+</div>
+<!-- load the d3.js library -->
+<script>
+
+var loaded = false;
+
+var parseTime = d3.timeParse('%Y-%m-%d %H:%M:%S');
+
+function isLog(name) {
+  return ['Tip_amount', 'Fare_amount', 'Tolls_amount', 'Trip_distance'].indexOf(name) >= 0;
+}
+
+function isTime(name) {
+  return ['Lpep_dropoff_datetime', 'lpep_pickup_datetime'].indexOf(name) >= 0;
+}
+
+function mapToRealName(s) {
+        switch(s) {
+            case "Lpep_dropoff_datetime":
+                return "Dropoff Time";
+            case "lpep_pickup_datetime":
+                return "Pickup Time";
+            case "Passenger_count":
+                return "Passengers";
+            case "Tip_amount":
+                return "Tip";
+            case "Fare_amount":
+                return "Fare";
+            case "Payment_type":
+                return "Payment Type"
+            case "Pickup_longitude":
+                return "Pickup Long";
+            case "Dropoff_longitude":
+                return "Dropoff Long";
+            case "Tolls_amount":
+                return "Tolls";
+            case "Trip_distance":
+                return "Distance";
+            default:
+                return s;
+        }
+    }
+
+function makeScatterplot(x_var, y_var) {
+    // set the dimensions and margins of the graph
+    var margin = {top: 20, right: 20, bottom: 30, left: 50},
+        padding = 40;
+        width = 900 - margin.left - margin.right - padding;
+        height = 500 - margin.top - margin.bottom - padding;
+
+    // set the ranges
+    var x = d3.scaleLinear().range([padding, width+padding]);
+    var y = d3.scaleLinear().range([height, 0]);
+
+    // append the svg obgect to the body of the page
+    // appends a 'group' element to 'svg'
+    // moves the 'group' element to the top left margin
+    var svg = d3.select("#scatter")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right + padding)
+        .attr("height", height + margin.top + margin.bottom + padding)
+      .append("g")
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+    // Get the data
+    d3.csv("csv/proj_data.csv", function(error, data) {
+      if (error) throw error;
+
+      // format the data
+      data.forEach(function(d) {
+        d[x_var] = +d[x_var];
+        d[y_var] = +d[y_var];
+      });
+
+      // Scale the range of the data
+      x.domain(d3.extent(data, function(d) { return d[x_var]; }));
+      y.domain(d3.extent(data, function(d) { return d[y_var]; }));
+          
+      // Add the scatterplot
+      svg.selectAll("dot")
+          .data(data)
+        .enter().append("circle")
+          .attr("r", 2.5)
+          .attr("cx", function(d) { return x(d[x_var]); })
+          .attr("cy", function(d) { return y(d[y_var]); });
+
+      // Add the X Axis
+      svg.append("g")
+          .attr("transform", "translate(0" +"," + height + ")")
+          .call(d3.axisBottom(x));
+
+      // Add the Y Axis
+      svg.append("g")
+          .attr("transform", "translate(" + padding + ",0)")
+          .call(d3.axisLeft(y));
+
+      // text label for the x axis
+      svg.append("text")             
+        .attr("transform",
+              "translate(" + (width/2 + padding) + " ," + 
+                             (height + margin.top + 20) + ")")
+        .style("text-anchor", "middle")
+        .text("PCA-1");
+
+      // text label for the y axis
+      svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - padding)
+        .attr("x",0 - (height / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("PCA-2");      
+      });
+}
+
+function makeBarChart() {
+
+
+  // set the dimensions and margins of the graph
+  var margin = {top: 20, right: 20, bottom: 30, left: 50},
+        padding = 40;
+        width = 900 - margin.left - margin.right - padding;
+        height = 500 - margin.top - margin.bottom - padding;
+
+  // set the ranges
+  var x = d3.scaleBand()
+            .range([padding, width])
+            .padding(0.1);
+  var y = d3.scaleLinear()
+            .range([height-padding, 0]);
+            
+  // append the svg object to the body of the page
+  // append a 'group' element to 'svg'
+  // moves the 'group' element to the top left margin
+  var svg = d3.select("#scree").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+      .attr("transform", 
+            "translate(" + margin.left + "," + margin.top + ")");
+
+  var valueline = d3.line()
+    .x(function(d) { return x(d.component) + x.bandwidth() / 2; })
+    .y(function(d) { return y(d.cum_percentage); });
+
+  // get the data
+  d3.csv("csv/scree.csv", function(error, data) {
+    if (error) throw error;
+
+    var cum_percentage = 0;
+    // format the data
+    data.forEach(function(d) {
+      d.percentage = +d.percentage;
+      console.log(d.percentage);
+      cum_percentage += d.percentage;
+      d.cum_percentage = cum_percentage;
+    });
+
+    // Scale the range of the data in the domains
+    x.domain(data.map(function(d) { return d.component; }));
+    y.domain([0, 100]);
+
+    // append the rectangles for the bar chart
+    var bar = svg.selectAll(".bar")
+        .data(data)
+      .enter().append("g")
+        .attr("class", "bar")
+        .attr("transform", function (d) {return "translate(" + x(d.component) + "," + y(d.percentage) + ")"});
+
+    bar.append('rect')
+      .attr("width", x.bandwidth())
+      .attr("height", function(d) { return height - y(d.percentage) - padding; })
+      .style("fill", "black");
+
+    // Add the valueline path.
+    svg.append("path")
+        .data([data])
+        .attr("class", "line")
+        .attr("d", valueline);
+
+    // add the x Axis
+    svg.append("g")
+        .attr("transform", "translate(0," + (height - padding) + ")")
+        .call(d3.axisBottom(x));
+
+    // add the y Axis
+    svg.append("g")
+        .attr("transform", "translate(" + padding + ",0)")
+        .call(d3.axisLeft(y).ticks(3).tickFormat(d3.format(".2f")));
+
+    // text label for the x axis
+    svg.append("text")             
+      .attr("transform",
+            "translate(" + (width/2 + padding) + " ," + 
+                           (height) + ")")
+      .style("text-anchor", "middle")
+      .text("Principal Component");
+
+    // text label for the y axis
+    svg.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 0 - padding)
+      .attr("x",0 - (height / 2))
+      .attr("dy", "1em")
+      .style("text-anchor", "middle")
+      .text("Percentage of Variance Explained (%)");
+
+    bar.append("text")
+            .attr("dy", ".75em")
+            .attr("y", -20)
+            .attr("x", (x.bandwidth() / 2))
+            .attr("text-anchor", "middle")
+            .text(function(d) { return d.percentage.toPrecision(3); })
+            .style("fill", "black")
+
+  });
+}
+
+
+makeScatterplot('1', '2');
+makeBarChart();
+</script>
+</body>

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="d3.js"></script>
+    </head>
+    <body>
+    <nav class="navbar navbar-default">
+  <div class="container">
+    <ul class="nav navbar-nav">
+      <li><a href="scatterplot.html">Scatterplot</a></li>
+      <li><a href="cor.html">Correlation Matrix</a></li> 
+      <li><a href="scatterplot_mat.html">Scatterplot Matrix</a></li> 
+      <li><a href="parallel.html">Parallel Coordinates</a></li> 
+      <li><a href="scree.html">PCA Plot & Scree Plot</a></li> 
+      <li><a href="biplot.html">Biplot</a></li> 
+      <li><a href="mds_1.html">MDS (Euclidean)</a></li> 
+      <li><a href="mds_2.html">MDS (1 - |correlation|)</a></li> 
+    </ul>
+  </div>
+</nav>
+        <div class="container" id="matrix">
+            <h3>Scatterplot Matrix</h3>
+        </div>
+    </body>
+    <script>
+
+    var color = "#337ab7";
+
+    var parseTime = d3.timeParse('%Y-%m-%d %H:%M:%S');
+
+    function isLog(name) {
+      return ['Tip_amount', 'Fare_amount', 'Tolls_amount', 'Trip_distance'].indexOf(name) >= 0;
+    }
+
+    function isTime(name) {
+      return ['Lpep_dropoff_datetime', 'lpep_pickup_datetime'].indexOf(name) >= 0;
+    }
+
+    function mapToRealName(s) {
+        switch(s) {
+            case "Lpep_dropoff_datetime":
+                return "Dropoff Time";
+            case "lpep_pickup_datetime":
+                return "Pickup Time";
+            case "Passenger_count":
+                return "Passengers";
+            case "Tip_amount":
+                return "Tip";
+            case "Fare_amount":
+                return "Fare";
+            case "Payment_type":
+                return "Payment Type"
+            case "Pickup_longitude":
+                return "Pickup Long";
+            case "Dropoff_longitude":
+                return "Dropoff Long";
+            case "Tolls_amount":
+                return "Tolls";
+            case "Trip_distance":
+                return "Distance";
+            default:
+                return s;
+        }
+    }
+
+    function makeScatterplot(selection, data, sw, sh, x_var, y_var) {
+        console.log(x_var);
+        console.log(y_var);
+        // set the dimensions and margins of the graph
+        var margin = {top: 20, right: 20, bottom: 30, left: 50},
+            width = sw - margin.left - margin.right,
+            height = sh - margin.top - margin.bottom;
+
+        var x, y = null;
+        // set the ranges
+
+        if (isLog(x_var)) {
+            x = d3.scaleLog().range([0, width]);
+        }
+        else if (isTime(x_var)) {
+            x = d3.scaleTime().range([0, width]);
+        }
+        else {
+            x = d3.scaleLinear().range([0, width]);
+        }
+        if (isLog(y_var)) {
+            y = d3.scaleLog().range([height, 0]);
+        }
+        else if (isTime(y_var)) {
+            y = d3.scaleTime().range([height, 0]);
+        }
+        else {
+            y = d3.scaleLinear().range([height, 0]);
+        }
+
+        // append the svg obgect to the body of the page
+        // appends a 'group' element to 'svg'
+        // moves the 'group' element to the top left margin
+        var svg = selection.append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform",
+                "translate(" + margin.left + "," + margin.top + ")");
+
+        // Scale the range of the data
+        if(isLog(x_var)) {
+            x.clamp(true).domain([0.1, d3.max(data, function(d) { return d[x_var]; })]);
+        }
+        else {
+            x.domain(d3.extent(data, function(d) { return d[x_var]; }));
+        }
+        if(isLog(y_var)) {
+            y.clamp(true).domain([0.1, d3.max(data, function(d) { return d[y_var]; })]);
+        }
+        else {
+            y.domain(d3.extent(data, function(d) { return d[y_var]; }));
+        }
+
+        // Add the scatterplot
+        svg.selectAll("dot")
+            .data(data)
+            .enter().append("circle")
+            .attr("r", 2.5)
+            .attr("cx", function(d) { return x(d[x_var]); })
+            .attr("cy", function(d) {
+                return y(d[y_var]); });
+
+        // Add the X Axis
+        if (isTime(x_var)) {
+            svg.append("g")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(x));
+        }
+        else {
+            svg.append("g")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(x).ticks(4, ".2f"));
+        }
+
+        // Add the Y Axis
+        if (isTime(y_var)) {
+            svg.append("g")
+                .call(d3.axisLeft(y));
+        }
+        else {
+            svg.append("g")
+                .call(d3.axisLeft(y).ticks(4, ".2f"));
+        }
+    }
+    
+
+    d3.csv('csv/results_top_five.csv', function(error, data) {
+        if (error) throw error;
+
+        var attributes = [];
+
+        for(var name in data[0]) {
+            attributes.push(name);
+        }
+
+        matrixData = [];
+
+        for(var i = 0; i < attributes.length; i++) {
+            matrixData.push(attributes)
+        }
+
+        data.forEach(function(d) {
+            attributes.forEach(function(x_var) {
+                if (isTime(x_var)) {
+                    d[x_var] = parseTime(d[x_var]);
+                }
+                else {
+                    d[x_var] = +d[x_var];
+                }
+            });
+        });
+
+        var width = 2400,
+            height = 2400,
+            body = d3.select('#matrix'),
+            svg = body.append('svg')
+                .attr('width', width)
+                .attr('height', height),
+            buffer = 100,
+            padding = 10,
+            sw = 400,
+            sh = 400;
+
+        attributes.forEach(function(d, i) {
+            svg.append('text')
+                .attr('x', function() {
+                    return buffer + padding + (sw + 5) * i;})
+                .attr('y', buffer - padding)
+                .text(mapToRealName(d));
+
+            svg.append('text')
+                .style('text-anchor', 'end')
+                .attr('y', function() {
+                    return buffer  * 3 + (sw + 5) * i - padding;})
+                .attr('x', buffer)
+                .text(mapToRealName(d));
+        });
+
+        var row = svg.selectAll('g')
+            .data(matrixData)
+            .enter().append('g')
+            .attr('transform', function(d, i) {
+                return 'translate(0, ' + (buffer + ((sh + 5) * i)) + ')';
+            })
+            .attr('data-y', function(d, i) {
+                return attributes[i];
+            });
+
+        var rows_columns = row.selectAll('g')
+            .data(function(d, i) {
+                return d;})
+            .enter()
+            .append('g')
+            .attr('transform', function(d, i) {
+                return 'translate( ' + (buffer + padding + (sw + 5) * i) + ',0)';
+            })
+            .attr('data-x', function(d, i) {
+                return attributes[i];
+            });
+
+        row.each(function(rowItem, i) {
+            currentRow = d3.select(this);
+            var columns = currentRow.selectAll('g');
+            columns.each(function(columnItem, i) {
+                d3.select(this).call(makeScatterplot, data, sw, sh, d3.select(this).attr('data-x'), currentRow.attr('data-y'));
+            });
+        });
+    });
+    </script>
+</html>

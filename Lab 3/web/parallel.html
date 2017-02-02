@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+svg{
+  font: 10px sans-serif;
+}
+
+.background path {
+  fill: none;
+  stroke: #ddd;
+  stroke-width: .1;
+  shape-rendering: crispEdges;
+}
+
+.foreground path {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: .1;
+}
+
+.brush .extent {
+  fill-opacity: .3;
+  stroke: #fff;
+  shape-rendering: crispEdges;
+}
+
+.axis line,
+.axis path {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.axis text {
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+}
+
+</style>
+<head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="scripts.js"></script>
+        <script src="https://d3js.org/d3.v4.min.js"></script>
+    </head>
+<body>
+  <nav class="navbar navbar-default">
+  <div class="container">
+    <ul class="nav navbar-nav">
+      <li><a href="scatterplot.html">Scatterplot</a></li>
+      <li><a href="cor.html">Correlation Matrix</a></li> 
+      <li><a href="scatterplot_mat.html">Scatterplot Matrix</a></li> 
+      <li><a href="parallel.html">Parallel Coordinates</a></li> 
+      <li><a href="scree.html">PCA Plot & Scree Plot</a></li> 
+      <li><a href="biplot.html">Biplot</a></li> 
+      <li><a href="mds_1.html">MDS (Euclidean)</a></li> 
+      <li><a href="mds_2.html">MDS (1 - |correlation|)</a></li> 
+    </ul>
+  </div>
+</nav>
+  <div class="container" id="parallel">
+    <h3>Parallel Coordinates</h3>
+  </div>
+</body>
+<script>
+
+var margin = {top: 50, right: 50, bottom: 50, left: 50},
+    width = 1500 - margin.left - margin.right,
+    height = 900 - margin.top - margin.bottom;
+
+var x = d3.scalePoint().range([0, width]),
+    y = {};
+
+var line = d3.line(),
+    axis = d3.axisLeft(),
+    background,
+    foreground;
+
+var svg = d3.select("#parallel").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var parseTime = d3.timeParse('%Y-%m-%d %H:%M:%S');
+
+function isLog(name) {
+  return ['Tip_amount', 'Fare_amount', 'Tolls_amount', 'Trip_distance'].indexOf(name) >= 0;
+}
+
+function isTime(name) {
+  return ['Lpep_dropoff_datetime', 'lpep_pickup_datetime'].indexOf(name) >= 0;
+}
+
+function mapToRealName(s) {
+    switch(s) {
+        case "Lpep_dropoff_datetime":
+            return "Dropoff Time";
+        case "lpep_pickup_datetime":
+            return "Pickup Time";
+        case "Passenger_count":
+            return "Passengers";
+        case "Tip_amount":
+            return "Tip";
+        case "Fare_amount":
+            return "Fare";
+        case "Payment_type":
+            return "Payment Type"
+        case "Pickup_longitude":
+            return "Pickup Long";
+        case "Dropoff_longitude":
+            return "Dropoff Long";
+          case "Dropoff_latitude":
+            return "Dropoff Latitude";
+        case "Tolls_amount":
+            return "Tolls";
+        case "Trip_distance":
+            return "Distance";
+        default:
+            return s;
+    }
+}
+
+d3.csv("csv/km_results.csv", function(error, data) {
+
+  attributes = ['Tolls_amount', 'Dropoff_latitude','Trip_distance','Fare_amount','Tip_amount','Payment_type','Dropoff_longitude','lpep_pickup_datetime','Lpep_dropoff_datetime','Passenger_count']
+
+
+  data.forEach(function(d, i) {
+    for (var i = 0; i < attributes.length; i++) {
+      if (isTime(attributes[i])) {
+        d[attributes[i]] = parseTime(d[attributes[i]]);
+      }
+      else {
+        d[attributes[i]] = +d[attributes[i]];
+      }
+    }
+  });
+
+  // Extract the list of dimensions and create a scale for each.
+  x.domain(dimensions = attributes.filter(function(d) {
+    if (isLog(d)) {
+      return d != "name" && (y[d] = d3.scaleLog().clamp(true)
+          .domain([0.1, d3.max(data, function(p) { return p[d]; })])
+          .range([height, 0]));
+    }
+    else if (isTime(d)) {
+      console.log(d);
+      return d != "name" && (y[d] = d3.scaleTime()
+          .domain(d3.extent(data, function(p) {
+            return p[d]; }))
+          .range([height, 0]));
+    }
+    else {
+      return d != "name" && (y[d] = d3.scaleLinear()
+          .domain(d3.extent(data, function(p) { return p[d]; }))
+          .range([height, 0]));
+    }
+  }));
+
+  console.log(y);
+
+  // Add grey background lines for context.
+  background = svg.append("g")
+      .attr("class", "background")
+    .selectAll("path")
+      .data(data)
+    .enter().append("path")
+      .attr("d", path);
+
+  // Add blue foreground lines for focus.
+  foreground = svg.append("g")
+      .attr("class", "foreground")
+    .selectAll("path")
+      .data(data)
+    .enter().append("path")
+      .attr("d", path);
+
+  // Add a group element for each dimension.
+  var g = svg.selectAll(".dimension")
+      .data(dimensions)
+    .enter().append("g")
+      .attr("class", "dimension")
+      .attr("transform", function(d) { return "translate(" + x(d) + ")"; });
+
+  // Add an axis and title.
+  g.append("g")
+      .attr("class", "axis")
+      .each(function(d) {
+        if (isLog(d)) {
+          d3.select(this).call(axis.scale(y[d]).tickFormat(d3.format(".2f")));
+        }
+        else {
+          d3.select(this).call(axis.scale(y[d]));
+        }
+        })
+    .append("text")
+      .style("text-anchor", "middle")
+      .style("fill", "black")
+      .attr("transform", "translate(0, -10)")
+      .text(function(d) { return mapToRealName(d); });
+});
+
+// Returns the path for a given data point.
+function path(d) {
+  return line(dimensions.map(function(p) { return [x(p), y[p](d[p])]; }));
+}
+
+</script>

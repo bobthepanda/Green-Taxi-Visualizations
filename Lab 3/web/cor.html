@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Bootstrap Case</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="main.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script src="d3.js"></script>
+    </head>
+    <body>
+        <nav class="navbar navbar-default">
+  <div class="container">
+    <ul class="nav navbar-nav">
+      <li><a href="scatterplot.html">Scatterplot</a></li>
+      <li><a href="cor.html">Correlation Matrix</a></li> 
+      <li><a href="scatterplot_mat.html">Scatterplot Matrix</a></li> 
+      <li><a href="parallel.html">Parallel Coordinates</a></li> 
+      <li><a href="scree.html">PCA Plot & Scree Plot</a></li> 
+      <li><a href="biplot.html">Biplot</a></li> 
+      <li><a href="mds_1.html">MDS (Euclidean)</a></li> 
+      <li><a href="mds_2.html">MDS (1 - |correlation|)</a></li> 
+    </ul>
+  </div>
+</nav>
+        <div id="cor" class="container">
+            <h3>Correlation Matrix</h3>
+        </div>
+    </body>
+    <script>
+
+    var color = "#337ab7";
+
+    function mapToRealName(s) {
+        switch(s) {
+            case "Lpep_dropoff_datetime":
+                return "Dropoff Time";
+            case "lpep_pickup_datetime":
+                return "Pickup Time";
+            case "Passenger_count":
+                return "Passengers";
+            case "Tip_amount":
+                return "Tip";
+            case "Fare_amount":
+                return "Fare";
+            case "Payment_type":
+                return "Payment Type"
+            case "Pickup_longitude":
+                return "Pickup Long";
+            case "Dropoff_longitude":
+                return "Dropoff Long";
+            case "Tolls_amount":
+                return "Tolls";
+            case "Trip_distance":
+                return "Distance";
+            default:
+                return s;
+        }
+    }
+
+    d3.csv('csv/cor.csv', function(error, data) {
+        if (error) throw error;
+
+        var attributes = [];
+
+        for(var name in data[0]) {
+            attributes.push(name);
+        }
+
+        matrixData = [];
+
+        data.forEach(function(d, index) {
+            matrixRow = [];
+            Object.keys(d).forEach(function(column, index) {
+                matrixRow.push(+d[column]);
+            });
+            matrixData.push(matrixRow);
+        });
+
+        var colorScale = d3.scaleLinear().domain([-1, 0, 1]).range(['blue', 'white', 'red']);
+
+        var width = 1200,
+            height = 1200,
+            body = d3.select('#cor'),
+            svg = body.append('svg')
+                .attr('width', width)
+                .attr('height', height),
+            buffer = 100,
+            padding = 10,
+            sw = 100,
+            sh = 100;
+
+        attributes.forEach(function(d, i) {
+            svg.append('text')
+                .attr('x', function() {
+                    return buffer + padding + (sw + 5) * i;})
+                .attr('y', buffer - padding)
+                .text(mapToRealName(d));
+
+            svg.append('text')
+                .style('text-anchor', 'end')
+                .attr('y', function() {
+                    return buffer  * 2 + (sw + 5) * i - padding;})
+                .attr('x', buffer)
+                .text(mapToRealName(d));
+        });
+
+        var row = svg.selectAll('g')
+            .data(matrixData)
+            .enter().append('g')
+            .attr('transform', function(d, i) {
+                return 'translate(0, ' + (buffer + ((sh + 5) * i)) + ')';
+            })
+            .attr('data-name', function(d, i) {
+                return attributes[i];
+            });
+
+        row.selectAll('rect')
+            .data(function(d, i) {
+                return d;})
+            .enter()
+            .append('rect')
+            .attr('x', function(d, i) {
+                return buffer + padding + (sw + 5) * i;})
+            .attr('width', sw)
+            .attr('height', sh)
+            .style('fill', function(d) {
+                return colorScale(d);
+            });
+    });
+    </script>
+</html>
